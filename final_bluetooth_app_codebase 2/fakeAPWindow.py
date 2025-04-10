@@ -221,3 +221,59 @@ class FakeAPWindow(QWidget):
         """Start hostapd and dnsmasq for persistent mode."""
         subprocess.Popen(["hostapd", "/tmp/hostapd.conf"])
         subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf"])
+
+    def start_simulation(self):
+        """Start simulation based on user selection."""
+        selected_device_name = self.device_selector.currentText()
+
+        if selected_device_name:
+            self.status_bar.showMessage(f"Simulating services for {selected_device_name}...", 3000)
+            asyncio.create_task(self.replicate_services(selected_device_name))
+        else:
+            self.status_bar.showMessage("Error: No device selected!", 3000)
+
+    async def replicate_services(self, device_name):
+        """Simulate Bluetooth GATT services."""
+        self.status_bar.showMessage(f"Simulating GATT Service for {device_name}...", 3000)
+        # Add Bluetooth GATT characteristics simulation here
+
+ def toggle_periodic_updates(self):
+        """Start or stop periodic updates for simulated GATT characteristics."""
+        if self.update_button.text() == "Start Periodic Updates":
+            self.update_button.setText("Stop Periodic Updates")
+            self.status_bar.showMessage("Periodic updates started.")
+            # Start periodic updates
+            device_mac = self.device_mac_input.text()  # Assuming there's a device MAC input
+            if device_mac:
+                asyncio.create_task(periodic_updates(device_mac))  # Trigger periodic updates
+            else:
+                self.status_bar.showMessage("Error: Please provide a device MAC address", 3000)
+        else:
+            self.update_button.setText("Start Periodic Updates")
+            self.status_bar.showMessage("Periodic updates stopped.")
+            # Stop periodic updates by canceling tasks or stopping them manually
+            # This would require maintaining a reference to the task if needed for stopping.
+
+    def clear_log(self):
+        """Clear the log output."""
+        self.verbose_log.clear()
+
+    def scan_for_devices(self):
+        """Scan for Bluetooth devices and populate the dropdown list."""
+        self.status_bar.showMessage("Scanning for devices...", 3000)
+        
+        # Example: Simulate device scan
+        # Replace with actual scanning logic with BleakScanner if required
+        self.available_devices = ["Device 1", "Device 2", "Device 3"]  # Simulated devices
+        device_names = self.available_devices
+
+        self.device_selector.clear()
+        self.device_selector.addItems(device_names)
+        self.status_bar.showMessage(f"Found {len(self.available_devices)} devices.", 3000)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = FakeAPWindow()
+    window.show()
+    sys.exit(app.exec())
+

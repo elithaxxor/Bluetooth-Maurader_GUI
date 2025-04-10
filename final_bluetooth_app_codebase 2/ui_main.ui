@@ -16,52 +16,66 @@
   <property name="styleSheet">
    <string>
     QWidget {
-        background-color: #F5F5F5;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        background-color: #F0F0F5;
+        font-family: 'Helvetica Neue', sans-serif;
     }
     QPushButton {
         background-color: #007AFF;
-        border-radius: 8px;
+        border-radius: 12px;
         color: white;
-        padding: 10px;
+        padding: 10px 20px;
+        font-size: 16px;
+        font-weight: bold;
+        border: none;
     }
     QPushButton:hover {
         background-color: #005BB5;
+        transition: background-color 0.3s ease;
     }
     QGroupBox {
         border: none;
-        font-size: 14px;
-        font-weight: bold;
-        color: #4A4A4A;
+        font-size: 16px;
+        color: #333;
+        margin-bottom: 10px;
     }
     QRadioButton {
-        font-size: 14px;
+        font-size: 16px;
         padding: 6px;
+        color: #555;
     }
     QComboBox {
-        font-size: 14px;
-        padding: 5px;
-        border: 1px solid #B0B0B0;
-        border-radius: 5px;
-    }
-    QTextEdit {
-        font-size: 14px;
+        font-size: 16px;
+        border: 1px solid #C0C0C0;
+        border-radius: 10px;
+        padding: 8px;
         background-color: white;
-        border: 1px solid #B0B0B0;
-        border-radius: 5px;
     }
     QSpinBox {
-        font-size: 14px;
-        padding: 5px;
-        border: 1px solid #B0B0B0;
-        border-radius: 5px;
+        font-size: 16px;
+        border: 1px solid #C0C0C0;
+        border-radius: 10px;
+        padding: 8px;
+        background-color: white;
+    }
+    QTextEdit {
+        font-size: 16px;
+        background-color: white;
+        border: 1px solid #C0C0C0;
+        border-radius: 10px;
+        padding: 10px;
     }
     QTabWidget::pane {
-        border: 1px solid #D0D0D0;
+        border: 1px solid #E0E0E0;
         background-color: #FFFFFF;
     }
     QStatusBar {
         background-color: #DCDCDC;
+        color: #333;
+        font-size: 14px;
+    }
+    QLabel {
+        font-size: 16px;
+        color: #333;
     }
    </string>
   </property>
@@ -201,4 +215,3 @@
   <widget class="QStatusBar" name="status_bar"/>
  </widget>
 </ui>
-

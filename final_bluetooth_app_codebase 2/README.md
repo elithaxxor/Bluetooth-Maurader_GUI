@@ -13,24 +13,25 @@ Download ui_main.ui
 Explanation of Each Function:
 
 	1.	start_advertising(ssid, service_uuid):
-	•	This function starts BLE advertising using hcitool (a tool from BlueZ) with the specified SSID and Service UUID.
-	•	It uses the sudo hcitool command to send advertising packets to simulate a Bluetooth device.
-	•	The function logs the result, or an error message if the advertising fails.
+		•	This function starts BLE advertising using hcitool (a tool from BlueZ) with the specified SSID and Service 			UUID.
+		•	It uses the sudo hcitool command to send advertising packets to simulate a Bluetooth device.
+		* The function logs the result, or an error message if the advertising fails.
 	2.	simulate_pairing(device_mac):
 	•	This function simulates pairing and connection with a Bluetooth device using bluetoothctl commands.
-	•	It runs several commands to enable pairing (agent on), scan for devices (scan on), pair with a device, and trust/connect the device using its MAC address.
+	•	It runs several commands to enable pairing (agent on), scan for devices (scan on), pair with a device, and trust
+		connect the device using its MAC address.
 	•	The function assumes that the MAC address of the device is passed as an argument.
 	3.	simulate_battery_level(client):
-	•	This function simulates the battery level of a Bluetooth device by randomly generating a number between 0 and 100.
-	•	It then updates the Battery Level characteristic on the Bluetooth device.
-	•	The UUID for the Battery Level characteristic is 00002a19-0000-1000-8000-00805f9b34fb, which is used to write the simulated value to the GATT server.
+		•	This function simulates the battery level of a Bluetooth device by randomly generating a number between 0 			and 100.
+		•	It then updates the Battery Level characteristic on the Bluetooth device.
+		•	The UUID for the Battery Level characteristic is 00002a19-0000-1000-8000-00805f9b34fb, which is used to 			write the simulated value to the GATT server.
 	4.	simulate_heart_rate(client):
-	•	This function simulates the heart rate measurement for a Bluetooth device by generating a random number between 60 and 100.
-	•	The Heart Rate Measurement characteristic is updated with this value.
-	•	The UUID for the Heart Rate Measurement characteristic is 00002a37-0000-1000-8000-00805f9b34fb.
+		•	This function simulates the heart rate measurement for a Bluetooth device by generating a random number 			between 60 and 100.
+		•	The Heart Rate Measurement characteristic is updated with this value.
+		•	The UUID for the Heart Rate Measurement characteristic is 00002a37-0000-1000-8000-00805f9b34fb.
 	5.	periodic_updates(client):
-	•	This function runs asynchronously and periodically simulates updates for the battery level and heart rate every 5 seconds.
-	•	The asyncio.sleep(5) call introduces a 5-second delay between each update, so that the simulated data is updated in real-time.
+		•	This function runs asynchronously and periodically simulates updates for the battery level and heart rate 			every 5 seconds.
+		•	The asyncio.sleep(5) call introduces a 5-second delay between each update, so that the simulated data is 			updated in real-time.
 
 ⸻
 

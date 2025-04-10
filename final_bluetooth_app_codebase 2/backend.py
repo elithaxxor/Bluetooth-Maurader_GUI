@@ -1,7 +1,7 @@
 import subprocess
 import random
-import asyncio
 from bleak import BleakClient, BleakGATTCharacteristic
+import asyncio
 
 def start_advertising(ssid, service_uuid):
     """
@@ -57,18 +57,4 @@ def simulate_heart_rate(client):
     print(f"Simulated Heart Rate: {heart_rate} bpm")
     
     # Assuming BleakClient or custom client has an `add_characteristic` method:
-    heart_rate_char = BleakGATTCharacteristic('00002a37-0000-1000-8000-00805f9b34fb', value=bytes([heart_rate]))
-    client.add_characteristic(heart_rate_char)
-
-async def periodic_updates(client):
-    """
-    Periodically simulate data changes for battery level, heart rate, etc.
-    The updates are triggered every 5 seconds.
-    """
-    while True:
-        # Simulate battery level and heart rate
-        simulate_battery_level(client)
-        simulate_heart_rate(client)
-
-        # Wait for 5 seconds before updating again
-        await asyncio.sleep(5)
+    heart_rate_char = BleakGATTCharacteristic('00002a37-0000-1000-8000-00805f9b34fb

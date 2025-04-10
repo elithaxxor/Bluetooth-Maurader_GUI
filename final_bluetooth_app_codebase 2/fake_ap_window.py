@@ -1,10 +1,9 @@
-# Front end entry 
 import sys
+import subprocess
 import asyncio
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSpinBox, QSplitter
-
 from bluetooth_simulation import start_advertising, simulate_pairing, simulate_battery_level, simulate_heart_rate, periodic_updates
 
 class FakeAPWindow(QWidget):

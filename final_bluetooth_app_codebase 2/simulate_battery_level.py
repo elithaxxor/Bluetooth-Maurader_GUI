@@ -10,3 +10,5 @@ def simulate_battery_level(client):
     
     # Assuming BleakClient or custom client has an `add_characteristic` method:
     battery_char = BleakGATTCharacteristic('00002a19-0000-1000-8000-00805f9b34fb', value=bytes([
+    client.add_characteristic(battery_char)   
+    

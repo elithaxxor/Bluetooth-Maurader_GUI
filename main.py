@@ -3,7 +3,7 @@ import subprocess
 import asyncio
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSplitter, QSpacerItem, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSpinBox, QSlider
 
 from bleak import BleakScanner, BleakClient, _logger
 
@@ -98,6 +98,13 @@ class FakeAPWindow(QWidget):
         self.interface_selector.addItems(self.get_wireless_interfaces())
         form_layout.addRow("Interface: ", self.interface_selector)
 
+        # Noise (Path Loss Exponent) Input
+        self.noise_level_input = QSpinBox(self)
+        self.noise_level_input.setRange(2, 6)
+        self.noise_level_input.setValue(2)  # Default to 2 (Free space)
+        self.noise_level_input.setSuffix(' (n)')
+        form_layout.addRow("Path Loss Exponent (n): ", self.noise_level_input)
+
         # Start/Stop Buttons
         self.start_button = QPushButton("Start Fake AP")
         self.start_button.clicked.connect(self.start_fake_ap)
@@ -180,6 +187,22 @@ class FakeAPWindow(QWidget):
         """Retrieve available wireless interfaces."""
         return ["wlan0", "wlan1"]  # Dummy example
 
+    def calculate_distance(self, rssi, A=-59, n=2):
+        """
+        Calculate distance using the RSSI and the path loss model.
+        
+        :param rssi: RSSI value in dBm.
+        :param A: Reference RSSI at 1 meter (default is -59 for many Bluetooth devices).
+        :param n: Path loss exponent (default is 2 for line-of-sight).
+        :return: Estimated distance in meters.
+        """
+        try:
+            distance = 10 ** ((A - rssi) / (10 * n))
+            return distance
+        except Exception as e:
+            print(f"Error calculating distance: {str(e)}")
+            return None
+
     async def scan_for_devices(self):
         """Scan for BLE devices and populate the dropdown list."""
         self.status_bar.showMessage("Scanning for devices...", 3000)
@@ -214,12 +237,13 @@ class FakeAPWindow(QWidget):
 
         if selected_device:
             self.status_bar.showMessage(f"Simulating services for {selected_device_name}...", 3000)
-            asyncio.create_task(self.replicate_services(selected_device))
+            asyncio.create_task(self.replicate)
+                        asyncio.create_task(self.replicate_services(selected_device))
         else:
             self.status_bar.showMessage("Error: No device selected!", 3000)
 
     async def replicate_services(self, device):
-        """Replicate Bluetooth GATT services using pybluez."""
+        """Replicate Bluetooth GATT services using pybluez and calculate distance from RSSI."""
         self.status_bar.showMessage(f"Simulating GATT Service for {device.name}...", 3000)
 
         # Example: Simulating GATT services from the device
@@ -229,19 +253,35 @@ class FakeAPWindow(QWidget):
                 services = await client.get_services()
                 for service in services:
                     self.log_event(f"Service: {service.uuid}")
+
                     if service.uuid == BATTERY_SERVICE_UUID:
                         battery_level = await client.read_gatt_char(BATTERY_LEVEL_CHAR_UUID)
                         self.log_event(f"Battery Level: {battery_level[0]}%")
+                        self.update_distance(client)
                         await asyncio.sleep(5)  # Real-time updates
 
                     if service.uuid == HEART_RATE_SERVICE_UUID:
                         heart_rate = await client.read_gatt_char(HEART_RATE_MEASUREMENT_CHAR_UUID)
                         self.log_event(f"Heart Rate: {heart_rate[0]}")
+                        self.update_distance(client)
                         await asyncio.sleep(5)  # Real-time updates
                         
             except Exception as e:
                 self.log_event(f"Error: {str(e)}")
                 self.status_bar.showMessage(f"Error: {str(e)}", 3000)
+
+    def update_distance(self, client):
+        """Update the distance based on RSSI and the user-specified path loss exponent."""
+        # Get the current RSSI value from the client
+        rssi_value = client.rssi
+        noise_level = self.noise_level_input.value()  # Get user-selected path loss exponent
+        
+        # Calculate the estimated distance
+        distance = self.calculate_distance(rssi_value, n=noise_level)
+        
+        # Log the calculated distance in the verbose log
+        if distance is not None:
+            self.log_event(f"Estimated Distance from Device: {distance:.2f} meters (RSSI: {rssi_value} dBm)")
 
     def log_event(self, event):
         """Log events to the verbose log panel."""

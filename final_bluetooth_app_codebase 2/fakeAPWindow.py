@@ -1,8 +1,4 @@
-import sys
-import subprocess
-import asyncio
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
+
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSpinBox, QSlider
 from bluetooth_simulation import start_advertising, simulate_pairing, simulate_battery_level, simulate_heart_rate, periodic_updates
 
@@ -172,4 +168,56 @@ class FakeAPWindow(QWidget):
 
                     if service.uuid == HEART_RATE_SERVICE_UUID:
                         heart_rate = await client.read_gatt_char(HEART_RATE_MEASUREMENT_CHAR_UUID)
-                        self.log_event(f"Heart Rate: {
+                        self.log_event(f"Heart Rate: {heart_rate[0]}")
+                        self.update_distance(client)
+                        await asyncio.sleep(5)
+
+            except Exception as e:
+                self.log_event(f"Error: {str(e)}")
+                self.status_bar.showMessage(f"Error: {str(e)}", 3000)
+
+    def log_event(self, event):
+        """Log events to the verbose log panel."""
+        self.verbose_log.append(event)
+
+    def clear_log(self):
+        """Clear the log output."""
+        self.verbose_log.clear()
+
+    def start_fake_ap(self):
+        """Start the Fake AP based on the selected options."""
+        ssid = self.ssid_input.text()
+        channel = self.channel_selector.currentText()
+        self.interface = self.interface_selector.currentText()
+
+        if not ssid:
+            self.status_bar.showMessage("Error: SSID cannot be empty!", 3000)
+            return
+
+        self.status_bar.showMessage(f"Starting {self.mode.capitalize()} Fake AP with SSID '{ssid}' on {self.interface}...", 3000)
+
+        if self.mode == "discovery":
+            self.start_discovery_mode(ssid, channel)
+        else:
+            self.start_persistent_mode(ssid, channel)
+
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+
+    def stop_fake_ap(self):
+        """Stop the Fake AP and all related processes."""
+        self.status_bar.showMessage("Stopping Fake AP...", 3000)
+        
+        subprocess.run(["pkill", "airbase-ng"])
+
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+
+    def start_discovery_mode(self, ssid, channel):
+        """Start airbase-ng in discovery mode."""
+        subprocess.Popen(["airbase-ng", "-e", ssid, "-c", str(channel), self.interface])
+
+    def start_persistent_mode(self, ssid, channel):
+        """Start hostapd and dnsmasq for persistent mode."""
+        subprocess.Popen(["hostapd", "/tmp/hostapd.conf"])
+        subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf"])

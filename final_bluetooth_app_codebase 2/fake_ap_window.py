@@ -1,3 +1,4 @@
+
 import sys
 import asyncio
 from PyQt6.QtCore import Qt
@@ -196,35 +197,13 @@ class FakeAPWindow(QWidget):
         # Add Bluetooth GATT characteristics simulation here
 
     def toggle_periodic_updates(self):
-        """Start or stop periodic updates for simulated GATT characteristics."""
+        """Toggle periodic updates for the simulated device."""
         if self.update_button.text() == "Start Periodic Updates":
             self.update_button.setText("Stop Periodic Updates")
-            self.status_bar.showMessage("Periodic updates started.")
-            # Start periodic updates
-            device_mac = self.device_mac_input.text()  # Assuming there's a device MAC input
-            if device_mac:
-                asyncio.create_task(periodic_updates(device_mac))  # Trigger periodic updates
-            else:
-                self.status_bar.showMessage("Error: Please provide a device MAC address", 3000)
+            asyncio.create_task(periodic_updates(self.device_mac))
         else:
             self.update_button.setText("Start Periodic Updates")
-            self.status_bar.showMessage("Periodic updates stopped.")
-            # Stop periodic updates by canceling tasks or stopping them manually
-            # This would require maintaining a reference to the task if needed for stopping.
 
     def clear_log(self):
-        """Clear the log output."""
+        """Clear the verbose log output."""
         self.verbose_log.clear()
-
-    def scan_for_devices(self):
-        """Scan for Bluetooth devices and populate the dropdown list."""
-        self.status_bar.showMessage("Scanning for devices...", 3000)
-        
-        # Example: Simulate device scan
-        # Replace with actual scanning logic with BleakScanner if required
-        self.available_devices = ["Device 1", "Device 2", "Device 3"]  # Simulated devices
-        device_names = self.available_devices
-
-        self.device_selector.clear()
-        self.device_selector.addItems(device_names)
-        self.status_bar.showMessage(f"Found {len(self.available_devices)} devices.", 3000)

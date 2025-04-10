@@ -1,208 +1,74 @@
-import sys
+import subprocess
+import random
 import asyncio
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSpinBox, QSplitter
+from bleak import BleakClient, BleakGATTCharacteristic
 
-from bluetooth_simulation import start_advertising, simulate_pairing, simulate_battery_level, simulate_heart_rate, periodic_updates
+# Function to start advertising a Bluetooth device
+def start_advertising(ssid, service_uuid):
+    """
+    Simulate advertising a Bluetooth device with the given SSID and service UUID.
+    """
+    try:
+        # Example command to start advertising with specific UUID and SSID
+        command = f"sudo hcitool -i hci0 cmd 0x08 0x0008 0x00 0x00 {service_uuid}"
+        subprocess.run(command, shell=True, check=True)
+        print(f"Advertising started with SSID: {ssid} and Service UUID: {service_uuid}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error starting advertising: {e}")
 
-class FakeAPWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("Bluetooth Device Simulation")
-        self.setWindowIcon(QIcon("icon.png"))  # Use a mac-style icon here
-        self.setGeometry(100, 100, 800, 600)
-
-        self.interface = "wlan0"  # Default interface
-        self.mode = "discovery"  # Default mode
-        self.device_mac = ""
-        self.available_devices = []
-
-        self.init_ui()
-
-    def init_ui(self):
-        main_layout = QVBoxLayout()
-        form_layout = QFormLayout()
-        controls_layout = QHBoxLayout()
-
-        # Mode selector for Fake AP
-        self.mode_group = QGroupBox("Select Mode")
-        self.discovery_radio = QRadioButton("Discovery Mode")
-        self.persistent_radio = QRadioButton("Persistent Mode")
-        self.discovery_radio.setChecked(True)  # Default to Discovery Mode
-        self.discovery_radio.toggled.connect(self.toggle_mode)
+# Function to simulate pairing with a Bluetooth device
+def simulate_pairing(device_mac):
+    """
+    Simulate pairing with a Bluetooth device using bluetoothctl.
+    """
+    try:
+        commands = [
+            f"echo -e 'agent on' | bluetoothctl",  # Enable the agent for pairing
+            f"echo -e 'scan on' | bluetoothctl",  # Start scanning for devices
+            f"echo -e 'pair {device_mac}' | bluetoothctl",  # Pair with the device
+            f"echo -e 'trust {device_mac}' | bluetoothctl",  # Trust the device
+            f"echo -e 'connect {device_mac}' | bluetoothctl"  # Connect to the device
+        ]
         
-        mode_layout = QVBoxLayout()
-        mode_layout.addWidget(self.discovery_radio)
-        mode_layout.addWidget(self.persistent_radio)
-        self.mode_group.setLayout(mode_layout)
+        # Execute pairing commands
+        for command in commands:
+            subprocess.run(command, shell=True, check=True)
 
-        # SSID Input
-        self.ssid_input = QLineEdit(self)
-        self.ssid_input.setPlaceholderText("Enter Fake AP SSID")
-        form_layout.addRow("SSID: ", self.ssid_input)
+        print(f"Pairing with device {device_mac} simulated successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error during pairing: {e}")
 
-        # Service UUID Input (for Bluetooth advertising)
-        self.service_uuid_input = QLineEdit(self)
-        self.service_uuid_input.setPlaceholderText("Enter Bluetooth Service UUID")
-        form_layout.addRow("Service UUID: ", self.service_uuid_input)
+# Function to simulate a battery level for a Bluetooth device (0-100%)
+def simulate_battery_level(client):
+    """
+    Simulate a battery level for a Bluetooth device.
+    """
+    battery_level = random.randint(0, 100)  # Simulate battery level as a random integer between 0 and 100
+    print(f"Simulated Battery Level: {battery_level}%")
+    
+    # Update the characteristic on the GATT server
+    battery_char = BleakGATTCharacteristic('00002a19-0000-1000-8000-00805f9b34fb', value=bytes([battery_level]))
+    client.add_characteristic(battery_char)
 
-        # Channel Selector for Fake AP
-        self.channel_selector = QComboBox(self)
-        self.channel_selector.addItems([str(i) for i in range(1, 15)])
-        self.channel_selector.setCurrentText("6")  # Default channel
-        form_layout.addRow("Channel: ", self.channel_selector)
+# Function to simulate a heart rate measurement (e.g., 60-100 bpm)
+def simulate_heart_rate(client):
+    """
+    Simulate a heart rate measurement for a Bluetooth device.
+    """
+    heart_rate = random.randint(60, 100)  # Simulate heart rate between 60-100 bpm
+    print(f"Simulated Heart Rate: {heart_rate} bpm")
+    
+    # Update the characteristic on the GATT server
+    heart_rate_char = BleakGATTCharacteristic('00002a37-0000-1000-8000-00805f9b34fb', value=bytes([heart_rate]))
+    client.add_characteristic(heart_rate_char)
 
-        # Interface Selector
-        self.interface_selector = QComboBox(self)
-        self.interface_selector.addItems(self.get_wireless_interfaces())
-        form_layout.addRow("Interface: ", self.interface_selector)
-
-        # Path Loss Exponent (n) Input for Distance Calculation
-        self.noise_level_input = QSpinBox(self)
-        self.noise_level_input.setRange(2, 6)
-        self.noise_level_input.setValue(2)
-        self.noise_level_input.setSuffix(' (n)')
-        form_layout.addRow("Path Loss Exponent (n): ", self.noise_level_input)
-
-        # Start/Stop Buttons for Fake AP
-        self.start_button = QPushButton("Start Fake AP")
-        self.start_button.clicked.connect(self.start_fake_ap)
-        
-        self.stop_button = QPushButton("Stop Fake AP")
-        self.stop_button.clicked.connect(self.stop_fake_ap)
-        self.stop_button.setEnabled(False)  # Initially disabled
-
-        controls_layout.addWidget(self.start_button)
-        controls_layout.addWidget(self.stop_button)
-
-        # Simulation Tab for Bluetooth GATT Services
-        self.simulation_tab = QWidget()
-        self.simulation_tab_layout = QVBoxLayout()
-
-        self.device_selector = QComboBox(self)
-        self.device_selector.setPlaceholderText("Detecting Devices...")
-
-        self.simulation_button = QPushButton("Start Simulation")
-        self.simulation_button.clicked.connect(self.start_simulation)
-
-        self.simulation_tab_layout.addWidget(QLabel("Simulate Device"))
-        self.simulation_tab_layout.addWidget(self.device_selector)
-        self.simulation_tab_layout.addWidget(self.simulation_button)
-
-        # Buttons for Real-Time Updates Control
-        self.update_button = QPushButton("Start Periodic Updates")
-        self.update_button.clicked.connect(self.toggle_periodic_updates)
-        self.update_button.setEnabled(False)  # Initially disabled
-
-        self.simulation_tab_layout.addWidget(self.update_button)
-
-        # Verbose Log Text Area
-        self.verbose_log = QTextEdit(self)
-        self.verbose_log.setReadOnly(True)
-        self.simulation_tab_layout.addWidget(QLabel("Verbose Log"))
-        self.simulation_tab_layout.addWidget(self.verbose_log)
-
-        # Clear Log Button
-        self.clear_log_button = QPushButton("Clear Log")
-        self.clear_log_button.clicked.connect(self.clear_log)
-        self.simulation_tab_layout.addWidget(self.clear_log_button)
-
-        # Log Display Section
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(self.simulation_tab)
-        splitter.addWidget(self.verbose_log)
-
-        # Tab Widget for organizing Fake AP and Simulation
-        self.tabs = QTabWidget()
-        self.tabs.addTab(splitter, "Simulation & Replication")
-        self.tabs.addTab(QWidget(), "Fake AP")
-
-        # Status Bar
-        self.status_bar = QStatusBar(self)
-        self.status_bar.showMessage("Ready")
-
-        # Adding widgets to main layout
-        main_layout.addWidget(self.tabs)
-        main_layout.addWidget(self.status_bar)
-        self.setLayout(main_layout)
-
-        # Start scanning for devices
-        self.scan_for_devices()
-
-    def toggle_mode(self):
-        """Toggle between discovery and persistent modes."""
-        if self.discovery_radio.isChecked():
-            self.mode = "discovery"
-        else:
-            self.mode = "persistent"
-
-    def get_wireless_interfaces(self):
-        """Retrieve available wireless interfaces."""
-        return ["wlan0", "wlan1"]  # Dummy example
-
-    def start_fake_ap(self):
-        """Start the Fake AP based on the selected options."""
-        ssid = self.ssid_input.text()
-        channel = self.channel_selector.currentText()
-        self.interface = self.interface_selector.currentText()
-
-        if not ssid:
-            self.status_bar.showMessage("Error: SSID cannot be empty!", 3000)
-            return
-
-        self.status_bar.showMessage(f"Starting {self.mode.capitalize()} Fake AP with SSID '{ssid}' on {self.interface}...", 3000)
-
-        if self.mode == "discovery":
-            self.start_discovery_mode(ssid, channel)
-        else:
-            self.start_persistent_mode(ssid, channel)
-
-        self.start_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
-
-    def stop_fake_ap(self):
-        """Stop the Fake AP and all related processes."""
-        self.status_bar.showMessage("Stopping Fake AP...", 3000)
-        
-        subprocess.run(["pkill", "airbase-ng"])
-
-        self.start_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
-
-    def start_discovery_mode(self, ssid, channel):
-        """Start airbase-ng in discovery mode."""
-        subprocess.Popen(["airbase-ng", "-e", ssid, "-c", str(channel), self.interface])
-
-    def start_persistent_mode(self, ssid, channel):
-        """Start hostapd and dnsmasq for persistent mode."""
-        subprocess.Popen(["hostapd", "/tmp/hostapd.conf"])
-        subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf"])
-
-    def start_simulation(self):
-        """Start simulation based on user selection."""
-        selected_device_name = self.device_selector.currentText()
-
-        if selected_device_name:
-            self.status_bar.showMessage(f"Simulating services for {selected_device_name}...", 3000)
-            asyncio.create_task(self.replicate_services(selected_device_name))
-        else:
-            self.status_bar.showMessage("Error: No device selected!", 3000)
-
-    async def replicate_services(self, device_name):
-        """Simulate Bluetooth GATT services."""
-        self.status_bar.showMessage(f"Simulating GATT Service for {device_name}...", 3000)
-        # Add Bluetooth GATT characteristics simulation here
-
-    def toggle_periodic_updates(self):
-        """Toggle periodic updates for the simulated device."""
-        if self.update_button.text() == "Start Periodic Updates":
-            self.update_button.setText("Stop Periodic Updates")
-            asyncio.create_task(periodic_updates(self.device_mac))
-        else:
-            self.update_button.setText("Start Periodic Updates")
-
-    def clear_log(self):
-        """Clear the verbose log output."""
-        self.verbose_log.clear()
+# Asynchronous function to periodically update characteristics (e.g., battery level, heart rate)
+async def periodic_updates(client):
+    """
+    Periodically simulate data changes for battery level, heart rate, etc.
+    The updates are triggered every 5 seconds.
+    """
+    while True:
+        simulate_battery_level(client)  # Simulate battery level
+        simulate_heart_rate(client)     # Simulate heart rate
+        await asyncio.sleep(5)  # Update every 5 seconds

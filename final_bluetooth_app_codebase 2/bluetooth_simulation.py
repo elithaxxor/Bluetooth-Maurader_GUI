@@ -1,76 +1,32 @@
 import sys
-import subprocess
 import asyncio
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSpinBox, QSlider
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QRadioButton, QGroupBox, QFormLayout, QTabWidget, QStatusBar, QTextEdit, QSpinBox, QSplitter
 
-from bleak import BleakScanner, BleakClient, _logger
-
-# Example UUIDs for different services
-HEART_RATE_SERVICE_UUID = "0000180D-0000-1000-8000-00805f9b34fb"
-HEART_RATE_MEASUREMENT_CHAR_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
-BATTERY_SERVICE_UUID = "0000180F-0000-1000-8000-00805f9b34fb"
-BATTERY_LEVEL_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
-VOLUME_CONTROL_SERVICE_UUID = "0000f000-0000-1000-8000-00805f9b34fb"  # Hypothetical UUID for volume control (depends on device)
-
-# Hardcoded device services and UUIDs
-DEVICE_CHOICES = {
-    "Heart Rate Monitor": {
-        "service_uuid": HEART_RATE_SERVICE_UUID,
-        "characteristic_uuid": HEART_RATE_MEASUREMENT_CHAR_UUID,
-        "description": "Simulating Heart Rate Measurement",
-        "characteristics": ["Heart Rate Measurement"],
-    },
-    "iPhone": {
-        "service_uuid": BATTERY_SERVICE_UUID,
-        "characteristic_uuid": BATTERY_LEVEL_CHAR_UUID,
-        "description": "Simulating iPhone Battery Level",
-        "characteristics": ["Battery Level"],
-    },
-    "Samsung": {
-        "service_uuid": BATTERY_SERVICE_UUID,
-        "characteristic_uuid": BATTERY_LEVEL_CHAR_UUID,
-        "description": "Simulating Samsung Battery Level",
-        "characteristics": ["Battery Level"],
-    },
-    "Bose Headphones": {
-        "service_uuid": BATTERY_SERVICE_UUID,
-        "characteristic_uuid": BATTERY_LEVEL_CHAR_UUID,
-        "description": "Simulating Bose Headphones Battery Level",
-        "characteristics": ["Battery Level", "Volume Control"],
-    },
-    "Beats Headphones": {
-        "service_uuid": BATTERY_SERVICE_UUID,
-        "characteristic_uuid": BATTERY_LEVEL_CHAR_UUID,
-        "description": "Simulating Beats Headphones Battery Level",
-        "characteristics": ["Battery Level", "Volume Control"],
-    }
-}
+from bluetooth_simulation import start_advertising, simulate_pairing, simulate_battery_level, simulate_heart_rate, periodic_updates
 
 class FakeAPWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Fake Access Point - EvilAP")
+        self.setWindowTitle("Bluetooth Device Simulation")
         self.setWindowIcon(QIcon("icon.png"))  # Use a mac-style icon here
         self.setGeometry(100, 100, 800, 600)
 
-        self.interface = "wlan0"  # Default, change as needed
-        self.ss_id = ""
-        self.channel = 6
+        self.interface = "wlan0"  # Default interface
         self.mode = "discovery"  # Default mode
+        self.device_mac = ""
         self.available_devices = []
 
         self.init_ui()
 
     def init_ui(self):
-        # Layouts
         main_layout = QVBoxLayout()
         form_layout = QFormLayout()
         controls_layout = QHBoxLayout()
 
-        # Mode selector
+        # Mode selector for Fake AP
         self.mode_group = QGroupBox("Select Mode")
         self.discovery_radio = QRadioButton("Discovery Mode")
         self.persistent_radio = QRadioButton("Persistent Mode")
@@ -87,9 +43,14 @@ class FakeAPWindow(QWidget):
         self.ssid_input.setPlaceholderText("Enter Fake AP SSID")
         form_layout.addRow("SSID: ", self.ssid_input)
 
-        # Channel Selector
+        # Service UUID Input (for Bluetooth advertising)
+        self.service_uuid_input = QLineEdit(self)
+        self.service_uuid_input.setPlaceholderText("Enter Bluetooth Service UUID")
+        form_layout.addRow("Service UUID: ", self.service_uuid_input)
+
+        # Channel Selector for Fake AP
         self.channel_selector = QComboBox(self)
-        self.channel_selector.addItems([str(i) for i in range(1, 15)])  # 1-14 channels
+        self.channel_selector.addItems([str(i) for i in range(1, 15)])
         self.channel_selector.setCurrentText("6")  # Default channel
         form_layout.addRow("Channel: ", self.channel_selector)
 
@@ -98,14 +59,14 @@ class FakeAPWindow(QWidget):
         self.interface_selector.addItems(self.get_wireless_interfaces())
         form_layout.addRow("Interface: ", self.interface_selector)
 
-        # Noise (Path Loss Exponent) Input
+        # Path Loss Exponent (n) Input for Distance Calculation
         self.noise_level_input = QSpinBox(self)
         self.noise_level_input.setRange(2, 6)
-        self.noise_level_input.setValue(2)  # Default to 2 (Free space)
+        self.noise_level_input.setValue(2)
         self.noise_level_input.setSuffix(' (n)')
         form_layout.addRow("Path Loss Exponent (n): ", self.noise_level_input)
 
-        # Start/Stop Buttons
+        # Start/Stop Buttons for Fake AP
         self.start_button = QPushButton("Start Fake AP")
         self.start_button.clicked.connect(self.start_fake_ap)
         
@@ -116,31 +77,26 @@ class FakeAPWindow(QWidget):
         controls_layout.addWidget(self.start_button)
         controls_layout.addWidget(self.stop_button)
 
-        # Simulation Tab for GATT Services
+        # Simulation Tab for Bluetooth GATT Services
         self.simulation_tab = QWidget()
         self.simulation_tab_layout = QVBoxLayout()
 
-        self.simulation_radio_group = QGroupBox("Choose Simulation Type")
-        self.device_selector = QComboBox(self)  # Dropdown for selecting device
+        self.device_selector = QComboBox(self)
         self.device_selector.setPlaceholderText("Detecting Devices...")
-        self.simulation_radio_group.setLayout(QVBoxLayout())
-        self.simulation_radio_group.layout().addWidget(self.device_selector)
 
         self.simulation_button = QPushButton("Start Simulation")
         self.simulation_button.clicked.connect(self.start_simulation)
 
-        # Buttons for Real-Time Updates Control
-        self.pause_button = QPushButton("Pause Updates")
-        self.pause_button.clicked.connect(self.toggle_real_time_updates)
-        self.pause_button.setEnabled(False)  # Initially disabled
-        self.resume_button = QPushButton("Resume Updates")
-        self.resume_button.clicked.connect(self.toggle_real_time_updates)
-        self.resume_button.setEnabled(False)  # Initially disabled
-
-        self.simulation_tab_layout.addWidget(self.simulation_radio_group)
+        self.simulation_tab_layout.addWidget(QLabel("Simulate Device"))
+        self.simulation_tab_layout.addWidget(self.device_selector)
         self.simulation_tab_layout.addWidget(self.simulation_button)
-        self.simulation_tab_layout.addWidget(self.pause_button)
-        self.simulation_tab_layout.addWidget(self.resume_button)
+
+        # Buttons for Real-Time Updates Control
+        self.update_button = QPushButton("Start Periodic Updates")
+        self.update_button.clicked.connect(self.toggle_periodic_updates)
+        self.update_button.setEnabled(False)  # Initially disabled
+
+        self.simulation_tab_layout.addWidget(self.update_button)
 
         # Verbose Log Text Area
         self.verbose_log = QTextEdit(self)
@@ -156,10 +112,9 @@ class FakeAPWindow(QWidget):
         # Log Display Section
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.addWidget(self.simulation_tab)
-        splitter.addWidget(QLabel("Service Logs"))
         splitter.addWidget(self.verbose_log)
 
-        # Tab Widget
+        # Tab Widget for organizing Fake AP and Simulation
         self.tabs = QTabWidget()
         self.tabs.addTab(splitter, "Simulation & Replication")
         self.tabs.addTab(QWidget(), "Fake AP")
@@ -187,54 +142,67 @@ class FakeAPWindow(QWidget):
         """Retrieve available wireless interfaces."""
         return ["wlan0", "wlan1"]  # Dummy example
 
-    def calculate_distance(self, rssi, A=-59, n=2):
-        """
-        Calculate distance using the RSSI and the path loss model.
-        
-        :param rssi: RSSI value in dBm.
-        :param A: Reference RSSI at 1 meter (default is -59 for many Bluetooth devices).
-        :param n: Path loss exponent (default is 2 for line-of-sight).
-        :return: Estimated distance in meters.
-        """
-        try:
-            distance = 10 ** ((A - rssi) / (10 * n))
-            return distance
-        except Exception as e:
-            print(f"Error calculating distance: {str(e)}")
-            return None
+    def start_fake_ap(self):
+        """Start the Fake AP based on the selected options."""
+        ssid = self.ssid_input.text()
+        channel = self.channel_selector.currentText()
+        self.interface = self.interface_selector.currentText()
 
-    async def scan_for_devices(self):
-        """Scan for BLE devices and populate the dropdown list."""
-        self.status_bar.showMessage("Scanning for devices...", 3000)
-        
-        # Scanning for devices
-        scanner = BleakScanner()
-        devices = await scanner.discover()
-        self.available_devices = devices
+        if not ssid:
+            self.status_bar.showMessage("Error: SSID cannot be empty!", 3000)
+            return
 
-        # Update the dropdown list with device names
-        device_names = [device.name if device.name else "Unnamed Device" for device in devices]
-        self.device_selector.clear()
-        self.device_selector.addItems(device_names)
+        self.status_bar.showMessage(f"Starting {self.mode.capitalize()} Fake AP with SSID '{ssid}' on {self.interface}...", 3000)
 
-        self.status_bar.showMessage(f"Found {len(devices)} devices.", 3000)
-
-    def toggle_real_time_updates(self):
-        """Pause or resume real-time updates for device characteristics."""
-        if self.pause_button.isEnabled():
-            self.pause_button.setEnabled(False)
-            self.resume_button.setEnabled(True)
+        if self.mode == "discovery":
+            self.start_discovery_mode(ssid, channel)
         else:
-            self.pause_button.setEnabled(True)
-            self.resume_button.setEnabled(False)
+            self.start_persistent_mode(ssid, channel)
+
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+
+    def stop_fake_ap(self):
+        """Stop the Fake AP and all related processes."""
+        self.status_bar.showMessage("Stopping Fake AP...", 3000)
+        
+        subprocess.run(["pkill", "airbase-ng"])
+
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+
+    def start_discovery_mode(self, ssid, channel):
+        """Start airbase-ng in discovery mode."""
+        subprocess.Popen(["airbase-ng", "-e", ssid, "-c", str(channel), self.interface])
+
+    def start_persistent_mode(self, ssid, channel):
+        """Start hostapd and dnsmasq for persistent mode."""
+        subprocess.Popen(["hostapd", "/tmp/hostapd.conf"])
+        subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf"])
 
     def start_simulation(self):
         """Start simulation based on user selection."""
         selected_device_name = self.device_selector.currentText()
 
-        # Find the device object based on the name
-        selected_device = next((device for device in self.available_devices if device.name == selected_device_name), None)
-
-        if selected_device:
+        if selected_device_name:
             self.status_bar.showMessage(f"Simulating services for {selected_device_name}...", 3000)
-            asyncio.create_task(self.replicate
+            asyncio.create_task(self.replicate_services(selected_device_name))
+        else:
+            self.status_bar.showMessage("Error: No device selected!", 3000)
+
+    async def replicate_services(self, device_name):
+        """Simulate Bluetooth GATT services."""
+        self.status_bar.showMessage(f"Simulating GATT Service for {device_name}...", 3000)
+        # Add Bluetooth GATT characteristics simulation here
+
+    def toggle_periodic_updates(self):
+        """Toggle periodic updates for the simulated device."""
+        if self.update_button.text() == "Start Periodic Updates":
+            self.update_button.setText("Stop Periodic Updates")
+            asyncio.create_task(periodic_updates(self.device_mac))
+        else:
+            self.update_button.setText("Start Periodic Updates")
+
+    def clear_log(self):
+        """Clear the verbose log output."""
+        self.verbose_log.clear()

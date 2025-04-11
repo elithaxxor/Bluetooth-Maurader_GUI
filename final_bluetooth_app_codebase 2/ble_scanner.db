@@ -1,0 +1,77 @@
+# BLE + Wi-Fi Toolkit Project
+# This file will be continuously updated as we build each module
+# Split structure: BLE scanner, Wi-Fi toolkit, encryption features, and GUI modules
+
+# Placeholder: Initial layout for BLE scanner core logic
+
+import asyncio
+from bleak import BleakScanner
+import sqlite3
+import time
+import threading
+
+DB_PATH = "ble_scanner.db"
+
+class BLEScanner:
+    def __init__(self):
+        self.devices = {}
+        self.lock = threading.Lock()
+        self.running = False
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        self.cursor = self.conn.cursor()
+        self._init_db()
+
+    def _init_db(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scan_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mac TEXT,
+                name TEXT,
+                rssi INTEGER,
+                timestamp TEXT
+            )
+        """)
+        self.conn.commit()
+
+    async def scan(self):
+        while self.running:
+            devices = await BleakScanner.discover()
+            with self.lock:
+                for d in devices:
+                    self.devices[d.address] = {
+                        "name": d.name,
+                        "rssi": d.rssi,
+                        "timestamp": time.time()
+                    }
+                    self._log_to_db(d.address, d.name, d.rssi)
+            await asyncio.sleep(5)
+
+    def _log_to_db(self, mac, name, rssi):
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        self.cursor.execute("INSERT INTO scan_logs (mac, name, rssi, timestamp) VALUES (?, ?, ?, ?)",
+                            (mac, name, rssi, timestamp))
+        self.conn.commit()
+
+    def start(self):
+        self.running = True
+        threading.Thread(target=self._run_loop, daemon=True).start()
+
+    def _run_loop(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.scan())
+
+    def stop(self):
+        self.running = False
+        self.conn.close()
+
+if __name__ == "__main__":
+    scanner = BLEScanner()
+    try:
+        print("[+] Starting BLE Scanner")
+        scanner.start()
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("[-] Stopping BLE Scanner")
+        scanner.stop()
